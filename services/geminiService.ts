@@ -50,14 +50,59 @@ export const generateSvgFromPrompt = async (prompt: string): Promise<string> => 
     if (svgMatch && svgMatch[0]) {
       return svgMatch[0];
     } else {
-      // If regex fails, return raw text but warn/handle in UI if it's not valid
-      // For now, we assume the model follows instructions well due to the system prompt.
-      // If the model returns markdown, we try to strip it.
       return rawText.replace(/```xml/g, '').replace(/```svg/g, '').replace(/```/g, '').trim();
     }
 
   } catch (error: any) {
     console.error("Gemini API Error:", error);
     throw new Error(error.message || "Failed to generate SVG.");
+  }
+};
+
+/**
+ * Refines an existing SVG based on a user's new instruction.
+ */
+export const refineSvg = async (currentSvg: string, instruction: string): Promise<string> => {
+  try {
+    const systemPrompt = `
+      You are an expert SVG editor. Your task is to modify an existing SVG code based on the user's request.
+      
+      Guidelines:
+      1.  **Output Format**: Return ONLY the modified SVG code. No markdown. No conversational text.
+      2.  **Constraint**: Keep the overall structure and style consistent unless explicitly asked to change it.
+      3.  **Validity**: Ensure the resulting code is valid SVG.
+    `;
+
+    const fullPrompt = `
+      Existing SVG Code:
+      ${currentSvg}
+
+      User Refinement Request:
+      ${instruction}
+
+      Output the full modified SVG code:
+    `;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: fullPrompt,
+      config: {
+        systemInstruction: systemPrompt,
+        temperature: 0.2, // Low temperature to preserve existing structure
+      },
+    });
+
+    const rawText = response.text || '';
+    const svgMatch = rawText.match(/<svg[\s\S]*?<\/svg>/i);
+    
+    if (svgMatch && svgMatch[0]) {
+      return svgMatch[0];
+    } else {
+      return rawText.replace(/```xml/g, '').replace(/```svg/g, '').replace(/```/g, '').trim();
+    }
+
+  } catch (error: any) {
+    console.error("Gemini Refine Error:", error);
+    throw new Error(error.message || "Failed to refine SVG.");
   }
 };
